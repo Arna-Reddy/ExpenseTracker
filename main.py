@@ -1,6 +1,7 @@
 import os
 print("Current working directory:", os.getcwd())
 import json
+
 import sqlite3
 
 expenses = []
@@ -79,7 +80,6 @@ def view_expenses():
 
     for row in rows:
         print(f"ID: {row[0]} | Date: {row[1]} | Category: {row[2]} | Amount: ₹{row[3]}")
-
     print()
 def category_total():
     conn = sqlite3.connect("expenses.db")
@@ -87,6 +87,10 @@ def category_total():
 
     category = input("Enter category: ")
 
+    category = category.strip().lower()
+    category = "-".join(category.split())  # removes extra spaces and adds single hyphen
+
+    print("Final category:", category)
     cursor.execute(
         "SELECT SUM(amount) FROM expenses WHERE category = ?",
         (category,)
@@ -228,14 +232,13 @@ def category_summary():
     print()
 
 while True:
-    print("==== Welcome to Expense Tracker ====")
+    print("=== Welcome to Expense Tracker ===")
     print("1. Add Expense")
     print("2. View Expenses")
     print("3. Calculate Total")
     print("4. Category-wise Total")
     print("5. Edit Expense")
     print("6. Delete Expense")
-
     print("7. Search by Category")
     print("8. Monthly Summary")
     print("9. Category Summary")
@@ -255,10 +258,8 @@ while True:
         edit_expense()
     elif choice == "6":
         delete_expense()
-
     elif choice == "7":
         search_by_category()
-
     elif choice == "8":
         monthly_summary()
     elif choice == "9":
@@ -268,6 +269,3 @@ while True:
         break
     else:
         print("Invalid choice. Try again!!!1")
-
-
-
