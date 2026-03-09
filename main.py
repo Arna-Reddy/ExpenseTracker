@@ -1,13 +1,45 @@
+# -------------------- IMPORTS --------------------
 import os
-print("Current working directory:", os.getcwd())
 import json
+BUDGET_FILE = "expenses.json"
+BUDGET_FILE = "budget.json"
 
+
+def set_budget():
+    try:
+        budget = float(input("Enter your monthly budget: "))
+    except ValueError:
+        print("Enter a valid number.")
+        return
+
+    data = {"budget": budget}
+
+    with open("budget.json", "w") as file:
+        json.dump(data, file, indent=4)
+
+    print("Budget saved successfully!\n")
+
+
+def get_budget():
+    try:
+        with open("budget.json", "r") as file:
+            data = json.load(file)
+            return data["budget"]
+    except:
+        return None
 import sqlite3
 
+print("Current working directory:", os.getcwd())
+
+# -------------------- GLOBAL VARIABLES --------------------
 expenses = []
+JSON_FILE = "expenses.json"
+DB_FILE = "expenses.db"
+
+
+# -------------------- DATABASE SETUP --------------------
 def init_db():
-    print("init_db is running...")
-    conn = sqlite3.connect("expenses.db")
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -21,29 +53,71 @@ def init_db():
 
     conn.commit()
     conn.close()
+def export_to_json():
+    conn = sqlite3.connect("expenses.db")
+    cursor = conn.cursor()
 
-init_db()
+    cursor.execute("SELECT * FROM expenses")
+    rows = cursor.fetchall()
+
+    expenses_list = []
+
+    for row in rows:
+        expense = {
+            "id": row[0],
+            "date": row[1],
+            "category": row[2],
+            "amount": row[3]
+        }
+        expenses_list.append(expense)
+
+    with open("expenses.json", "w") as file:
+        json.dump(expenses_list, file, indent=4)
+
+    conn.close()
+
+    print("Expenses exported to JSON successfully!")
 
 
-def load_from_file():
+# -------------------- JSON FUNCTIONS --------------------
+def save_to_json():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM expenses")
+    rows = cursor.fetchall()
+
+    data = []
+    for row in rows:
+        data.append({
+            "id": row[0],
+            "date": row[1],
+            "category": row[2],
+            "amount": row[3]
+        })
+
+    with open(JSON_FILE, "w") as file:
+        json.dump(data, file, indent=4)
+
+    conn.close()
+
+
+def load_from_json():
     global expenses
     try:
-        with open("expenses.json", "r") as file:
+        with open(JSON_FILE, "r") as file:
             expenses = json.load(file)
     except FileNotFoundError:
         expenses = []
 
-def save_to_file():
-    with open("expenses.json", "w") as file:
-        json.dump(expenses, file)
 
+# -------------------- ADD EXPENSE --------------------
 def add_expense():
-    conn = sqlite3.connect("expenses.db")
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
     date = input("Enter date (YYYY-MM-DD): ")
 
-    # 👇 ADD CATEGORY VALIDATION HERE
     while True:
         category = input("Enter category: ").strip()
         if category:
@@ -51,7 +125,12 @@ def add_expense():
         else:
             print("Category cannot be empty.")
 
-    amount = float(input("Enter amount: "))
+    while True:
+        try:
+            amount = float(input("Enter amount: "))
+            break
+        except ValueError:
+            print("Enter valid number")
 
     cursor.execute("""
         INSERT INTO expenses (date, category, amount)
@@ -59,11 +138,17 @@ def add_expense():
     """, (date, category, amount))
 
     conn.commit()
+    export_to_json()
     conn.close()
 
-    print("Expense added successfully!")
+    save_to_json()
+
+    print("Expense added successfully!\n")
+
+
+# -------------------- VIEW EXPENSES --------------------
 def view_expenses():
-    conn = sqlite3.connect("expenses.db")
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
     cursor.execute("SELECT * FROM expenses")
@@ -75,53 +160,57 @@ def view_expenses():
         print("No expenses found.\n")
         return
 
-    print("\nID  Date         Category      Amount")
+    print("\nID | Date | Category | Amount")
     print("-" * 40)
 
     for row in rows:
-        print(f"ID: {row[0]} | Date: {row[1]} | Category: {row[2]} | Amount: ₹{row[3]}")
+        print(f"{row[0]} | {row[1]} | {row[2]} | ₹{row[3]}")
+
     print()
-def category_total():
-    conn = sqlite3.connect("expenses.db")
+
+
+# -------------------- TOTAL EXPENSE --------------------
+def calculate_total():
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
-    category = input("Enter category: ")
+    cursor.execute("SELECT SUM(amount) FROM expenses")
+    result = cursor.fetchone()[0]
 
-    category = category.strip().lower()
-    category = "-".join(category.split())  # removes extra spaces and adds single hyphen
+    conn.close()
 
-    print("Final category:", category)
+    if result:
+        print(f"\nTotal Expenses: ₹{result}\n")
+    else:
+        print("No expenses recorded.\n")
+
+
+# -------------------- CATEGORY TOTAL --------------------
+def category_total():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    category = input("Enter category: ").strip()
+
     cursor.execute(
         "SELECT SUM(amount) FROM expenses WHERE category = ?",
         (category,)
     )
 
     result = cursor.fetchone()[0]
-
-    if result:
-        print(f"\nTotal for {category}: ₹{result}")
-    else:
-        print("No expenses found for this category.")
-
-    conn.close()
-def calculate_total():
-    conn = sqlite3.connect("expenses.db")
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT SUM(amount) FROM expenses")
-    result = cursor.fetchone()[0]
-
-    if result:
-        print(f"\nTotal Expenses: ₹{result}")
-    else:
-        print("No expenses recorded.")
-
     conn.close()
 
+    if result:
+        print(f"Total for {category}: ₹{result}\n")
+    else:
+        print("No expenses found for this category.\n")
+
+
+# -------------------- EDIT EXPENSE --------------------
 def edit_expense():
-    expense_id = input("Enter ID of expense to edit: ")
+    expense_id = input("Enter ID to edit: ")
 
-    new_date = input("Enter new date (YYYY-MM-DD): ")
+    new_date = input("Enter new date: ")
     new_category = input("Enter new category: ")
 
     while True:
@@ -131,83 +220,75 @@ def edit_expense():
         except ValueError:
             print("Enter valid number.")
 
-    conn = sqlite3.connect("expenses.db")
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
     cursor.execute("""
         UPDATE expenses
-        SET date = ?, category = ?, amount = ?
-        WHERE id = ?
+        SET date=?, category=?, amount=?
+        WHERE id=?
     """, (new_date, new_category, new_amount, expense_id))
 
     conn.commit()
+    export_to_json()
 
     if cursor.rowcount == 0:
-        print("No expense found with that ID.\n")
+        print("Expense not found.\n")
     else:
-        print("Expense updated successfully.\n")
+        print("Expense updated.\n")
 
     conn.close()
+
+    save_to_json()
+
+
+# -------------------- DELETE EXPENSE --------------------
 def delete_expense():
-    expense_id = input("Enter ID of expense to delete: ")
+    expense_id = input("Enter ID to delete: ")
 
-    conn = sqlite3.connect("expenses.db")
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+    cursor.execute("DELETE FROM expenses WHERE id=?", (expense_id,))
     conn.commit()
+    export_to_json()
 
     if cursor.rowcount == 0:
-        print("No expense found with that ID.\n")
+        print("Expense not found.\n")
     else:
-        print("Expense deleted successfully.\n")
+        print("Expense deleted.\n")
 
     conn.close()
 
-def search_by_category():
-    conn = sqlite3.connect("expenses.db")
-    cursor = conn.cursor()
+    save_to_json()
 
-    category = input("Enter category to search: ")
 
-    cursor.execute(
-        "SELECT * FROM expenses WHERE category = ?",
-        (category,)
-    )
-
-    rows = cursor.fetchall()
-
-    if rows:
-        for row in rows:
-            print(row)
-    else:
-        print("No expenses found.")
-
-    conn.close()
+# -------------------- MONTHLY SUMMARY --------------------
 def monthly_summary():
-    month_input = input("Enter month (YYYY-MM): ")
+    month = input("Enter month (YYYY-MM): ")
 
-    conn = sqlite3.connect("expenses.db")
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
     cursor.execute("""
         SELECT SUM(amount)
         FROM expenses
         WHERE date LIKE ?
-    """, (month_input + "%",))
+    """, (month + "%",))
 
-    result = cursor.fetchone()
+    total = cursor.fetchone()[0]
+
     conn.close()
 
-    total = result[0]
-
-    if total is None:
-        print("No expenses found for that month.\n")
+    if total:
+        print(f"Total for {month}: ₹{total}\n")
     else:
-        print(f"Total expense for {month_input}: {total}\n")
+        print("No expenses for that month.\n")
 
+
+# -------------------- CATEGORY SUMMARY --------------------
 def category_summary():
-    conn = sqlite3.connect("expenses.db")
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -219,53 +300,97 @@ def category_summary():
     rows = cursor.fetchall()
     conn.close()
 
-    if not rows:
-        print("No expenses found.\n")
-        return
-
-    print("\nCategory-wise Summary:")
+    print("\nCategory Summary")
     print("-" * 30)
 
     for row in rows:
-        print(f"{row[0]} : {row[1]}")
+        print(f"{row[0]} : ₹{row[1]}")
 
     print()
 
+def check_budget():
+    budget = get_budget()
+
+    if budget is None:
+        print("Budget not set.\n")
+        return
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT SUM(amount) FROM expenses")
+    total = cursor.fetchone()[0]
+
+    conn.close()
+
+    if total is None:
+        total = 0
+
+    print("\nMonthly Budget:", budget)
+    print("Total Spent:", total)
+
+    if total > budget:
+        print("⚠ Budget Exceeded!\n")
+    else:
+        print("Remaining Budget:", budget - total, "\n")
+
+
+
+
+# -------------------- MAIN MENU --------------------
+init_db()
+
 while True:
-    print("=== Welcome to Expense Tracker ===")
-    print("1. Add Expense")
-    print("2. View Expenses")
-    print("3. Calculate Total")
-    print("4. Category-wise Total")
-    print("5. Edit Expense")
-    print("6. Delete Expense")
-    print("7. Search by Category")
+
+    print("====== Expense Tracker ======")
+    print("1. Set Budget")
+    print("2. Add Expense")
+    print("3. View Expenses")
+    print("4. Total Expenses")
+    print("5. Category Total")
+    print("6. Edit Expense")
+    print("7. Delete Expense")
     print("8. Monthly Summary")
     print("9. Category Summary")
-    print("10. Exit")
 
-    choice = input("Choose an option: ")
+    print("10. Check Budget")
+    print("11. Exit")
+
+    choice = input("Enter choice: ")
 
     if choice == "1":
-        add_expense()
+        set_budget()
+
     elif choice == "2":
-        view_expenses()
+        add_expense()
+
     elif choice == "3":
-        calculate_total()
+        view_expenses()
+
     elif choice == "4":
-        category_total()
+        calculate_total()
+
     elif choice == "5":
-        edit_expense()
+        category_total()
+
     elif choice == "6":
-        delete_expense()
+        edit_expense()
+
     elif choice == "7":
-        search_by_category()
+        delete_expense()
+
     elif choice == "8":
         monthly_summary()
     elif choice == "9":
         category_summary()
+
     elif choice == "10":
-        print("Exiting program...")
+        check_budget()
+
+    elif choice == "11":
+        print("Goodbye!")
         break
+
+
     else:
-        print("Invalid choice. Try again!!!1")
+        print("Invalid choice.\n")
